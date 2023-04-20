@@ -2,13 +2,15 @@ package cmd
 
 import (
 	"github.com/spf13/cobra"
+	"nvmc/util"
 	"os"
 )
 
 // rootCmd represents the base command when called without any subcommands
 var rootCmd = &cobra.Command{
-	Use:   "nvmc",
-	Short: "Install and manage multiple versions of node",
+	Use:     "nvmc",
+	Short:   "Install and manage multiple versions of node",
+	Version: util.VERSION,
 }
 
 // Execute adds all child commands to the root command and sets flags appropriately.

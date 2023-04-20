@@ -8,7 +8,7 @@ import (
 	"strings"
 )
 
-const VERSION = "0.0.1"
+var VERSION = "UNSET"
 
 func GetNvmcHomePath() (string, error) {
 	userHome, err := os.UserHomeDir()

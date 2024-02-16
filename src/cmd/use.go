@@ -2,16 +2,20 @@ package cmd
 
 import (
 	"errors"
+	"fmt"
 	"github.com/spf13/cobra"
 	"nvmc/util"
 	"os"
+	"path/filepath"
 )
 
 type useCmd struct {
-	command *cobra.Command
+	command    *cobra.Command
+	globalOpts globalOpts
+	useOpts    useOpts
 }
 
-func newUseCmd() *useCmd {
+func newUseCmd(globalOpts globalOpts) *useCmd {
 	cmd := &useCmd{}
 	cmd.command = &cobra.Command{
 		Use:   "use <version>",
@@ -21,6 +25,8 @@ $ nvmc use 18.2.0`,
 		Args: cobra.ExactArgs(1),
 		RunE: cmd.run(),
 	}
+
+	cmd.globalOpts = globalOpts
 
 	return cmd
 }
@@ -38,23 +44,22 @@ func use(version string) error {
 		return err
 	}
 
+	// TODO: Validate the version
 	currentVersionDir, err := util.GetVersionPath(version)
 	if err != nil {
 		return err
 	}
-	currentVersionExeDir, err := util.GetVersionExePath(version)
+
+	currentVersionStats, err := os.Stat(currentVersionDir)
 	if err != nil {
 		return err
 	}
-	nodeSymLink, err := util.GetSymLinkPath()
-	if err != nil {
-		return err
+	if !currentVersionStats.IsDir() {
+		return errors.New("Version path already exists and is not a directory. Path: " + currentVersionDir)
 	}
 
-	if _, err := os.Stat(currentVersionDir); err != nil {
-		if errors.Is(err, os.ErrNotExist) {
-			return errors.New("requested installation " + version + " does not exist")
-		}
+	nodeSymLink, err := util.GetSymLinkPath()
+	if err != nil {
 		return err
 	}
 
@@ -62,9 +67,16 @@ func use(version string) error {
 		return err
 	}
 
-	if err := os.Symlink(currentVersionExeDir, nodeSymLink); err != nil {
+	installationInfo, err := util.GetInstallationInfo(version)
+	if err != nil {
 		return err
 	}
+
+	if err := os.Symlink(filepath.Join(currentVersionDir, installationInfo.FileNameWithoutExtension), nodeSymLink); err != nil {
+		return err
+	}
+
+	fmt.Println("now using node " + version)
 
 	return nil
 }

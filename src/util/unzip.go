@@ -20,13 +20,13 @@ func Unzip(zipFile fs.File, basePath string) (string, error) {
 		return "", err
 	}
 	if strings.HasSuffix(fileInfo.Name(), ".zip") {
-		return ZipUnzip(zipFile, basePath)
+		return zipUnzip(zipFile, basePath)
 	} else {
-		return TarGzUnzip(zipFile, basePath)
+		return tarGzUnzip(zipFile, basePath)
 	}
 }
 
-func TarGzUnzip(zipFile fs.File, basePath string) (string, error) {
+func tarGzUnzip(zipFile fs.File, basePath string) (string, error) {
 	zipReadCloser, err := gzip.NewReader(zipFile)
 	if err != nil {
 		return "", err
@@ -60,22 +60,28 @@ func TarGzUnzip(zipFile fs.File, basePath string) (string, error) {
 				return "", err
 			}
 		case tar.TypeReg:
-			if err := os.MkdirAll(filepath.Dir(path), os.ModePerm); err != nil {
-				return "", err
-			}
-			outFile, err := os.Create(path)
+			err := func() error {
+				if err := os.MkdirAll(filepath.Dir(path), os.ModePerm); err != nil {
+					return err
+				}
+				outFile, err := os.Create(path)
+				if err != nil {
+					return err
+				}
+				defer outFile.Close()
+
+				if err = os.Chmod(path, fs.FileMode(header.Mode)); err != nil {
+					return err
+				}
+				if _, err := io.Copy(outFile, tarReadCloser); err != nil {
+					return err
+				}
+
+				return nil
+			}()
 			if err != nil {
 				return "", err
 			}
-
-			if err = os.Chmod(path, fs.FileMode(header.Mode)); err != nil {
-				return "", err
-			}
-			if _, err := io.Copy(outFile, tarReadCloser); err != nil {
-				return "", err
-			}
-			// Don't defer close to avoid buffering everything in memory.
-			outFile.Close()
 		default:
 			return "", errors.New(fmt.Sprintf("unsupported tar type: %v for name %s", header.Typeflag, header.Name))
 		}
@@ -86,7 +92,7 @@ func TarGzUnzip(zipFile fs.File, basePath string) (string, error) {
 	return unzippedFilePath, nil
 }
 
-func ZipUnzip(zipFile fs.File, basePath string) (string, error) {
+func zipUnzip(zipFile fs.File, basePath string) (string, error) {
 	buff := bytes.NewBuffer([]byte{})
 	size, err := io.Copy(buff, zipFile)
 	if err != nil {
@@ -101,32 +107,39 @@ func ZipUnzip(zipFile fs.File, basePath string) (string, error) {
 	unzippedFilePath := filepath.Join(basePath, zipReader.File[0].Name)
 
 	for _, zipFile := range zipReader.File {
-		// TODO: Close fileReader
-		fileReader, err := zipFile.Open()
+		err := func() error {
+			fileReader, err := zipFile.Open()
+			if err != nil {
+				return err
+			}
+			defer fileReader.Close()
+			path := filepath.Join(basePath, zipFile.Name)
+
+			if zipFile.FileInfo().IsDir() {
+
+				if err := os.MkdirAll(path, zipFile.Mode()); err != nil {
+					return err
+				}
+			} else {
+
+				if err := os.MkdirAll(filepath.Dir(path), os.ModePerm); err != nil {
+					return err
+				}
+				file, err := os.OpenFile(path, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, zipFile.Mode())
+				if err != nil {
+					return err
+				}
+				defer file.Close()
+
+				if _, err = io.Copy(file, fileReader); err != nil {
+					return err
+				}
+			}
+			return nil
+		}()
+
 		if err != nil {
 			return "", err
-		}
-		path := filepath.Join(basePath, zipFile.Name)
-
-		if zipFile.FileInfo().IsDir() {
-
-			if err := os.MkdirAll(path, zipFile.Mode()); err != nil {
-				return "", err
-			}
-		} else {
-
-			if err := os.MkdirAll(filepath.Dir(path), os.ModePerm); err != nil {
-				return "", err
-			}
-			// TODO: Close file
-			file, err := os.OpenFile(path, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, zipFile.Mode())
-			if err != nil {
-				return "", err
-			}
-
-			if _, err = io.Copy(file, fileReader); err != nil {
-				return "", err
-			}
 		}
 	}
 	return unzippedFilePath, nil

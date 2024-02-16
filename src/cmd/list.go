@@ -3,25 +3,32 @@ package cmd
 import (
 	"errors"
 	"fmt"
+	"github.com/Masterminds/semver/v3"
 	"github.com/spf13/cobra"
 	"nvmc/util"
 	"os"
+	"sort"
 	"strings"
 )
 
 type listCmd struct {
-	command *cobra.Command
+	command    *cobra.Command
+	globalOpts globalOpts
+	listOpts   listOpts
 }
 
-func newListCmd() *listCmd {
+func newListCmd(globalOpts globalOpts) *listCmd {
 	cmd := &listCmd{}
 	cmd.command = &cobra.Command{
+		Aliases: []string{"ls"},
 		Use:     "list",
 		Short:   "List all installed node versions.",
 		Example: `$ nvmc list`,
 		Args:    cobra.ExactArgs(0),
 		RunE:    cmd.run(),
 	}
+
+	cmd.globalOpts = globalOpts
 
 	return cmd
 }
@@ -39,15 +46,14 @@ func list() error {
 	} else if len(versions) == 0 {
 		return errors.New("no versions installed")
 	}
-	current, err := currentVersion()
+
+	current, _ := currentVersion()
 
 	for _, version := range versions {
+		if current == version {
+			version = version + " (current)"
+		}
 		fmt.Println(version)
-	}
-	if len(current) > 0 && err == nil {
-		fmt.Println("current version: " + current)
-	} else {
-		fmt.Println("current version not available")
 	}
 
 	return nil
@@ -71,6 +77,27 @@ func retrieveVersions() ([]string, error) {
 		}
 	}
 
+	semverVersions := make([]*semver.Version, 0)
+	parseFailures := make([]string, 0)
+	for _, version := range versions {
+		semverVersion, err := semver.NewVersion(version)
+		if err != nil {
+			parseFailures = append(parseFailures, version)
+		} else {
+			semverVersions = append(semverVersions, semverVersion)
+		}
+	}
+
+	sort.Sort(semver.Collection(semverVersions))
+
+	versions = make([]string, len(semverVersions)+len(parseFailures))
+	for i, semverVersion := range semverVersions {
+		versions[i] = "v" + semverVersion.String()
+	}
+	for i, parseFailure := range parseFailures {
+		versions[i+len(semverVersions)] = "Unable to parse " + parseFailure
+	}
+
 	return versions, nil
 }
 
@@ -80,9 +107,8 @@ func currentVersion() (string, error) {
 		return "", err
 	}
 	version, err := os.Readlink(nodeSymLink)
-	// If the symlink or symlink destination does not exist then the current version is missing, but it isn't an error.
 	if errors.Is(err, os.ErrNotExist) {
-		return "", nil
+		return "", errors.New("Current version is missing. Version: " + version)
 	} else if err != nil {
 		return "", err
 	}

@@ -32,7 +32,7 @@ jobs:
           github_token: ${{ secrets.GITHUB_TOKEN }}
           goos: ${{ matrix.goos }}
           goarch: ${{ matrix.goarch }}
-          goversion: "https://dl.google.com/go/go1.20.3.linux-amd64.tar.gz"
+          goversion: "1.22"
           project_path: "./src"
           binary_name: "nvmc"
           ldflags: -X "nvmc/util.VERSION=${{ env.RELEASE_TAG }}"

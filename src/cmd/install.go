@@ -1,25 +1,27 @@
 package cmd
 
 import (
+	"bytes"
+	"crypto/sha256"
+	"encoding/hex"
 	"errors"
 	"fmt"
 	"github.com/spf13/cobra"
 	"io"
+	"io/fs"
 	"nvmc/util"
 	"os"
-	"runtime"
+	"path/filepath"
+	"strings"
 )
 
-type installOptions struct {
-	use bool
-}
-
 type installCmd struct {
-	command *cobra.Command
-	options installOptions
+	command     *cobra.Command
+	installOpts installOpts
+	globalOpts  globalOpts
 }
 
-func newInstallCmd() *installCmd {
+func newInstallCmd(globalOpts globalOpts) *installCmd {
 	cmd := &installCmd{}
 	cmd.command = &cobra.Command{
 		Use:   "install <version>",
@@ -30,7 +32,10 @@ $ nvmc install 18.2.0 --use`,
 		RunE: cmd.run(),
 	}
 
-	cmd.command.Flags().BoolVar(&cmd.options.use, "use", true, "After installing, set the installed <version> as active. (same as: nvmc use <version>).")
+	cmd.globalOpts = globalOpts
+	cmd.command.Flags().BoolVar(&cmd.installOpts.overrideExistingInstall, "override-existing-install", defaultInstallOpts.overrideExistingInstall, "Overwrite existing installation.")
+	cmd.command.Flags().BoolVar(&cmd.installOpts.skipChecksumValidation, "skip-checksum-validation", defaultInstallOpts.skipChecksumValidation, "Skip checksum validation after downloading.")
+	cmd.command.Flags().BoolVar(&cmd.installOpts.use, "use", defaultInstallOpts.use, "After installing, set the installed <version> as active. (same as: nvmc use <version>).")
 
 	return cmd
 }
@@ -38,96 +43,127 @@ $ nvmc install 18.2.0 --use`,
 func (c *installCmd) run() func(cmd *cobra.Command, args []string) error {
 	return func(cmd *cobra.Command, args []string) error {
 		version := args[0]
-		return install(version, c.options)
+		return install(version, c.globalOpts, c.installOpts)
 	}
 }
 
-func install(version string, opts installOptions) error {
+func install(version string, globalOpts globalOpts, installOpts installOpts) error {
 	version, err := util.NormalizeVersion(version)
 	if err != nil {
 		return err
 	}
 
-	// TODO: Validate the version
+	installationInfo, err := util.GetInstallationInfo(version)
+	if err != nil {
+		return err
+	}
 
+	// TODO: Validate the version
 	versionDir, err := util.GetVersionPath(version)
 	if err != nil {
 		return err
 	}
-	tempDir, err := os.MkdirTemp("", "nvmc-"+version)
+
+	if installOpts.overrideExistingInstall {
+		if err := os.RemoveAll(versionDir); err != nil {
+			return err
+		}
+	}
+
+	if _, err := os.Stat(versionDir); err == nil {
+		return errors.New("requested installation " + version + " already exists run with --override-existing-install to overwrite the existing version")
+	} else if err != nil && !errors.Is(err, os.ErrNotExist) {
+		return err
+	}
+
+	tempDir, err := os.MkdirTemp("", "nvmc-temp-"+version)
 	if err != nil {
 		return err
 	}
 	defer os.RemoveAll(tempDir)
 
-	if _, err := os.Stat(versionDir); err == nil {
-		return errors.New("requested installation " + version + " already exists, uninstall it and try again")
-	} else if !errors.Is(err, os.ErrNotExist) {
-		return err
-	}
-
-	fileName := "node-" + version + "-" + getNodeOs() + "-" + getNodeArch() + getDownloadExtension()
-	tempFile, err := os.CreateTemp(tempDir, "nvmc-"+fileName)
+	tempZipFile, err := os.Create(filepath.Join(tempDir, installationInfo.FileNameWithExtension))
 	if err != nil {
 		return err
 	}
-	defer tempFile.Close()
+	defer os.Remove(tempZipFile.Name())
 
-	// TODO: Download and validate the checksum.
-	if err := util.Download("https://nodejs.org/dist/"+version+"/"+fileName, tempFile); err != nil {
+	if err := util.Download(globalOpts.downloadUrl+"/"+version+"/"+installationInfo.FileNameWithExtension, tempZipFile); err != nil {
 		return err
 	}
-	if _, err := tempFile.Seek(0, io.SeekStart); err != nil {
+	if _, err := tempZipFile.Seek(0, io.SeekStart); err != nil {
 		return err
 	}
 
-	destPath, err := util.Unzip(tempFile, tempDir)
+	if !installOpts.skipChecksumValidation {
+		tempChecksumFile, err := os.Create(filepath.Join(tempDir, "SHASUMS256.txt"))
+		if err != nil {
+			return err
+		}
+		defer os.Remove(tempChecksumFile.Name())
+
+		if err := util.Download(globalOpts.downloadUrl+"/"+version+"/SHASUMS256.txt", tempChecksumFile); err != nil {
+			return err
+		}
+		if _, err := tempChecksumFile.Seek(0, io.SeekStart); err != nil {
+			return err
+		}
+
+		fileBuf := new(bytes.Buffer)
+		if _, err = fileBuf.ReadFrom(tempChecksumFile); err != nil {
+			return err
+		}
+		fileContents := fileBuf.String()
+
+		checksums := strings.Split(fileContents, "\n")
+		for _, checksumLine := range checksums {
+			if strings.HasSuffix(checksumLine, installationInfo.FileNameWithExtension) {
+				checksum, found := strings.CutSuffix(checksumLine, " "+installationInfo.FileNameWithExtension)
+				if !found {
+					return errors.New("unable to verify checksum")
+				}
+				hash := sha256.New()
+				if _, err := io.Copy(hash, tempZipFile); err != nil {
+					return err
+				}
+				if _, err := tempZipFile.Seek(0, io.SeekStart); err != nil {
+					return err
+				}
+				generatedChecksum := hex.EncodeToString(hash.Sum(nil))
+				if strings.TrimSpace(checksum) != strings.TrimSpace(generatedChecksum) {
+					return errors.New("checksum does not match")
+				}
+			}
+		}
+	}
+
+	_, err = util.Unzip(tempZipFile, tempDir)
 	if err != nil {
 		return err
 	}
 
-	if err := os.Rename(destPath, versionDir); err != nil {
+	versionsDir, err := util.GetVersionsPath()
+	if err != nil {
+		return err
+	}
+	if err := os.MkdirAll(versionsDir, fs.ModePerm); err != nil {
+		return err
+	}
+	if err := os.Rename(tempDir, versionDir); err != nil {
 		return err
 	}
 
-	if currVersion, err := currentVersion(); len(currVersion) == 0 && err == nil {
+	if _, err := currentVersion(); err != nil {
 		fmt.Println("there is not a current node version activated, will activate " + version)
-		opts.use = true
+		installOpts.use = true
 	}
 
-	if opts.use {
+	if installOpts.use {
 		if err := use(version); err != nil {
 			return err
 		}
 	}
 
+	fmt.Printf("successfully installed %s\n", version)
 	return nil
-}
-
-func getNodeOs() string {
-	switch runtime.GOOS {
-	case "windows":
-		return "win"
-	default:
-		return runtime.GOOS
-	}
-}
-
-func getNodeArch() string {
-	switch runtime.GOARCH {
-	case "amd64":
-		return "x64"
-	case "386":
-		return "x86"
-	default:
-		return runtime.GOARCH
-	}
-}
-
-func getDownloadExtension() string {
-	if runtime.GOOS == "windows" {
-		return ".zip"
-	}
-
-	return ".tar.gz"
 }

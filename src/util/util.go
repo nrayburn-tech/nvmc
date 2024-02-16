@@ -8,16 +8,45 @@ import (
 	"strings"
 )
 
+// VERSION nvmc library version set at compile time in release.yaml
 var VERSION = "UNSET"
 
-func GetNvmcHomePath() (string, error) {
-	userHome, err := os.UserHomeDir()
-	if err != nil {
-		return "", err
-	}
-	nvmcHome := filepath.Join(userHome, ".nvmc")
+type InstallationInfo struct {
+	FileExtension            string
+	FileNameWithExtension    string
+	FileNameWithoutExtension string
+}
 
-	return nvmcHome, nil
+func GetInstallationInfo(version string) (*InstallationInfo, error) {
+	version, err := NormalizeVersion(version)
+	if err != nil {
+		return nil, err
+	}
+
+	normalizedArch := getNodeArch()
+	normalizedPlatform := getNodeOs()
+
+	fileExtension := getFileExtension()
+	fileNameWithoutExtension := "node-" + version + "-" + normalizedPlatform + "-" + normalizedArch
+	fileNameWithExtension := fileNameWithoutExtension + fileExtension
+
+	return &InstallationInfo{fileExtension, fileNameWithExtension, fileNameWithoutExtension}, nil
+}
+
+func GetNvmcHomePath() (string, error) {
+	nvmcHome := os.Getenv("NVMC_HOME")
+	var home string
+	if len(nvmcHome) == 0 {
+		userHome, err := os.UserHomeDir()
+		if err != nil {
+			return "", err
+		}
+		home = filepath.Join(userHome, ".nvmc")
+	} else {
+		home = filepath.Clean(nvmcHome)
+	}
+
+	return home, nil
 }
 
 func GetVersionsPath() (string, error) {
@@ -40,21 +69,6 @@ func GetVersionPath(version string) (string, error) {
 	return versionDir, nil
 }
 
-func GetVersionExePath(version string) (string, error) {
-	versionDir, err := GetVersionPath(version)
-	if err != nil {
-		return "", err
-	}
-	var exeDir string
-	if runtime.GOOS == "windows" {
-		exeDir = versionDir
-	} else {
-		exeDir = filepath.Join(versionDir, "bin")
-	}
-
-	return exeDir, nil
-}
-
 func GetSymLinkPath() (string, error) {
 	nvmcHome, err := GetNvmcHomePath()
 	if err != nil {
@@ -74,4 +88,32 @@ func NormalizeVersion(version string) (string, error) {
 	}
 
 	return version, nil
+}
+
+func getFileExtension() string {
+	if runtime.GOOS == "windows" {
+		return ".zip"
+	}
+
+	return ".tar.gz"
+}
+
+func getNodeOs() string {
+	switch runtime.GOOS {
+	case "windows":
+		return "win"
+	default:
+		return runtime.GOOS
+	}
+}
+
+func getNodeArch() string {
+	switch runtime.GOARCH {
+	case "amd64":
+		return "x64"
+	case "386":
+		return "x86"
+	default:
+		return runtime.GOARCH
+	}
 }

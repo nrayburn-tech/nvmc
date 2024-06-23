@@ -11,7 +11,7 @@ jobs:
   build:
     strategy:
       matrix:
-        os: [ ubuntu-latest, windows-latest ]
+        os: [ ubuntu-latest ]
     runs-on: ${{ matrix.os }}
     defaults:
       run:
@@ -32,3 +32,12 @@ jobs:
 
       - name: Test
         run: go test -v ./...
+
+      - name: Install Node.js
+        run: ./nvmc install 22.3.0
+
+      - name: Update Path
+        run: echo "$HOME/.nvmc/nodejs/bin" >> $GITHUB_PATH
+
+      - name: Check Node.js Version
+        run: node --version

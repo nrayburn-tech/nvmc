@@ -39,7 +39,8 @@ jobs:
       - name: Check Linux Node.js Version
         if: runner.os != 'Windows'
         run: |
-          echo "$HOME/.nvmc/nodejs/bin" >> $GITHUB_PATH
+          PATH="$HOME/.nvmc/nodejs/bin:$PATH"
+          echo "$PATH"
           current_node_version=$(node --version);
           echo "Node Version: ${current_node_version}";
           if [[ $current_node_version != "v22.3.0" ]]; then
@@ -49,8 +50,8 @@ jobs:
       - name: Check Windows Node.js Version
         if: runner.os == 'Windows'
         run: |
-          Add-Content $env:GITHUB_PATH "$HOMEPATH\\.nvmc\\nodejs\\bin"
-          gci env:* | sort-object name
+          $env:Path = "$HOMEPATH\\.nvmc\\nodejs\\bin;$env:Path"
+          Write-Host "$env:Path"
           $current_node_version = node --version | Out-String
           Write-Host "Node Version: ${current_node_version}"
           if ($current_node_version -ne "v22.3.0") {

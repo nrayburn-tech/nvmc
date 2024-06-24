@@ -36,26 +36,20 @@ jobs:
       - name: Install Node.js
         run: ./nvmc install 22.3.0
 
-      - name: Update Linux Path
-        if: runner.os != 'Windows'
-        run: echo "$HOME/.nvmc/nodejs/bin" >> $GITHUB_PATH
-
-      - name: Update Windows Path
-        if: runner.os == 'Windows'
-        run: Add-Content $env:GITHUB_PATH "$HOMEPATH\\.nvmc\\nodejs\\bin"
-
-      - name: Check Node.js Version
+      - name: Check Linux Node.js Version
         if: runner.os != 'Windows'
         run: |
+          echo "$HOME/.nvmc/nodejs/bin" >> $GITHUB_PATH
           current_node_version=$(node --version);
           echo "Node Version: ${current_node_version}";
           if [[ $current_node_version != "v22.3.0" ]]; then
             exit 1;
           fi
 
-      - name: Check Node.js Version
+      - name: Check Windows Node.js Version
         if: runner.os == 'Windows'
         run: |
+          Add-Content $env:GITHUB_PATH "$HOMEPATH\\.nvmc\\nodejs\\bin"
           gci env:* | sort-object name
           $current_node_version = node --version | Out-String
           Write-Host "Node Version: ${current_node_version}"

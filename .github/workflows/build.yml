@@ -45,4 +45,19 @@ jobs:
         run: Add-Content $env:GITHUB_PATH "$HOME\\.nvmc\\nodejs\\bin"
 
       - name: Check Node.js Version
-        run: node --version
+        if: runner.os != 'Windows'
+        run: >
+          current_node_version=$(node --version);
+          echo "Node Version: ${current_node_version}"
+          if [[ $current_node_version != "v22.3.0" ]]; then
+            exit 1;
+          fi
+
+      - name: Check Node.js Version
+        if: runner.os == 'Windows'
+        run: >
+          gci env:* | sort-object name
+          $current_node_version=&"node --version" | Out-String
+          if ($current_node_version -ne "v22.3.0") {
+            exit 1
+          }

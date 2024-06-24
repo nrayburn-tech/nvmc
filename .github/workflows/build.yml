@@ -42,7 +42,7 @@ jobs:
 
       - name: Update Windows Path
         if: runner.os == 'Windows'
-        run: Add-Content $env:GITHUB_PATH "$HOME\\.nvmc\\nodejs\\bin"
+        run: Add-Content $env:GITHUB_PATH "$HOMEPATH\\.nvmc\\nodejs\\bin"
 
       - name: Check Node.js Version
         if: runner.os != 'Windows'

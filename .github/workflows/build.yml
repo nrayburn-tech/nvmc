@@ -50,7 +50,7 @@ jobs:
       - name: Check Windows Node.js Version
         if: runner.os == 'Windows'
         run: |
-          $env:Path = "$HOMEPATH\\.nvmc\\nodejs\\bin;$env:Path"
+          $env:Path = "$env:HOMEPATH\\.nvmc\\nodejs\\bin;$env:Path"
           Write-Host "$env:Path"
           $current_node_version = node --version | Out-String
           Write-Host "Node Version: ${current_node_version}"

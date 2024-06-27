@@ -3,7 +3,8 @@
 1. Download the latest release for your system from https://github.com/nrayburn-tech/nvmc/releases.
 2. Unzip the downloaded file.
 3. Add the included `nvmc` executable to your system PATH.
-4. Add the Node.js symlink to your path, the default location is `~/.nvmc/nodejs/bin`.
+4. Add the Node.js symlink to your path. The symlink will be created and updated anytime you run `nvmc use <version>`.
+   The default symlink location is `~/.nvmc/nodejs`.
 
 ### Uninstall
 

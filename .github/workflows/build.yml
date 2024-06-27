@@ -39,7 +39,7 @@ jobs:
       - name: Check Linux Node.js Version
         if: runner.os != 'Windows'
         run: |
-          PATH="$HOME/.nvmc/nodejs/bin:$PATH"
+          PATH="$HOME/.nvmc/nodejs:$PATH"
           echo "$PATH"
           current_node_version=$(node --version);
           echo "Node Version: ${current_node_version}";

@@ -7,6 +7,7 @@ import (
 	"nvmc/util"
 	"os"
 	"path/filepath"
+	"runtime"
 )
 
 type useCmd struct {
@@ -72,7 +73,13 @@ func use(version string) error {
 		return err
 	}
 
-	if err := os.Symlink(filepath.Join(currentVersionDir, installationInfo.FileNameWithoutExtension), nodeSymLink); err != nil {
+	var symLinkTarget string
+	if runtime.GOOS == "windows" {
+		symLinkTarget = filepath.Join(currentVersionDir, installationInfo.FileNameWithoutExtension)
+	} else {
+		symLinkTarget = filepath.Join(currentVersionDir, installationInfo.FileNameWithoutExtension, "bin")
+	}
+	if err := os.Symlink(symLinkTarget, nodeSymLink); err != nil {
 		return err
 	}
 

@@ -33,7 +33,6 @@ $ nvmc install 18.2.0 --use`,
 	}
 
 	cmd.globalOpts = globalOpts
-	cmd.command.Flags().BoolVar(&cmd.installOpts.overrideExistingInstall, "override-existing-install", defaultInstallOpts.overrideExistingInstall, "Overwrite existing installation.")
 	cmd.command.Flags().BoolVar(&cmd.installOpts.skipChecksumValidation, "skip-checksum-validation", defaultInstallOpts.skipChecksumValidation, "Skip checksum validation after downloading.")
 	cmd.command.Flags().BoolVar(&cmd.installOpts.use, "use", defaultInstallOpts.use, "After installing, set the installed <version> as active. (same as: nvmc use <version>).")
 
@@ -64,14 +63,8 @@ func install(version string, globalOpts globalOpts, installOpts installOpts) err
 		return err
 	}
 
-	if installOpts.overrideExistingInstall {
-		if err := os.RemoveAll(versionDir); err != nil {
-			return err
-		}
-	}
-
 	if _, err := os.Stat(versionDir); err == nil {
-		return errors.New("requested installation " + version + " already exists run with --override-existing-install to overwrite the existing version")
+		return errors.New("requested installation " + version + " already exists, run nvmc uninstall <version> to remove the existing installation")
 	} else if err != nil && !errors.Is(err, os.ErrNotExist) {
 		return err
 	}

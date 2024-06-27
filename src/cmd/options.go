@@ -8,12 +8,11 @@ type globalOpts struct {
 var defaultGlobalOpts = globalOpts{"https://nodejs.org/dist", true}
 
 type installOpts struct {
-	overrideExistingInstall bool
-	skipChecksumValidation  bool
-	use                     bool
+	skipChecksumValidation bool
+	use                    bool
 }
 
-var defaultInstallOpts = installOpts{false, false, false}
+var defaultInstallOpts = installOpts{false, false}
 
 type listOpts struct {
 }
